@@ -1,0 +1,31 @@
+{
+    "monitoring_interval": 5,
+    "gateway_ping_count": 3,
+    "internet_ping_count": 3,
+    "internet_host": "8.8.8.8",
+    "dns_test_domain": "google.com",
+    "http_test_url": "https://www.google.com",
+    "http_timeout": 5,
+
+    "network_info_refresh_seconds": 5,
+    "dns_timeout": 3,
+    "ping_timeout_seconds": 2,
+
+    "warning_thresholds": {
+        "latency_ms": 100,
+        "packet_loss_percent": 5,
+        "jitter_ms": 30
+    },
+
+    "analysis_window": 6,
+
+    "thresholds": {
+        "high_latency_ms": 200,
+        "critical_latency_ms": 500,
+        "packet_loss_percent": 10,
+        "critical_packet_loss_percent": 30,
+        "high_jitter_ms": 50,
+        "high_dns_response_ms": 500,
+        "high_http_response_ms": 3000
+    }
+}

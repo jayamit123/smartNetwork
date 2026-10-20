@@ -1,0 +1,18 @@
+# Smart Network Diagnosis System - Python dependencies
+#
+# This file is grown phase-by-phase; only packages actually imported by
+# the code that exists so far are listed. Tkinter and sqlite3 are part
+# of the Python standard library and are intentionally NOT listed here.
+# The system `ping` command is used via subprocess (see the note in
+# monitoring/latency_monitor.py for why ping3 was not used).
+
+# Phase 1 (system setup / network information):
+psutil>=5.9
+
+# Phase 2 (continuous monitoring: DNS + HTTP checks, live graphs):
+dnspython>=2.6
+requests>=2.31
+matplotlib>=3.8
+
+# Phase 3 (data storage): uses the standard-library sqlite3 module — no
+# extra package required.

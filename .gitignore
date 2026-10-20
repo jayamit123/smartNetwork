@@ -1,0 +1,16 @@
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+logs/
+
+*_before_*.py
+*_backup.py
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
