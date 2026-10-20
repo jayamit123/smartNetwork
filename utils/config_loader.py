@@ -43,17 +43,17 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _SETTINGS_PATH = os.path.join(_PROJECT_ROOT, "config", "settings.json")
 
 _DEFAULT_SETTINGS: Dict[str, Any] = {
-    "monitoring_interval": 5,
-    "gateway_ping_count": 3,
-    "internet_ping_count": 3,
+    "monitoring_interval": 1,
+    "gateway_ping_count": 1,
+    "internet_ping_count": 1,
     "internet_host": "8.8.8.8",
     "dns_test_domain": "google.com",
     "http_test_url": "https://www.google.com",
-    "http_timeout": 5,
+    "http_timeout": 1,
 
     "network_info_refresh_seconds": 5,
-    "dns_timeout": 3,
-    "ping_timeout_seconds": 2,
+    "dns_timeout": 1,
+    "ping_timeout_seconds": 1,
 
     "warning_thresholds": {
         "latency_ms": 100,

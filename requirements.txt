@@ -10,9 +10,14 @@
 psutil>=5.9
 
 # Phase 2 (continuous monitoring: DNS + HTTP checks, live graphs):
-dnspython>=2.6
 requests>=2.31
 matplotlib>=3.8
 
 # Phase 3 (data storage): uses the standard-library sqlite3 module — no
 # extra package required.
+
+# Web API
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+httpx>=0.27,<1
+reportlab>=4.2,<5

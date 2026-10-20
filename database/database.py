@@ -259,6 +259,33 @@ class Database:
             logger.error("Could not fetch sessions: %s", exc)
             return []
 
+    def clear_sessions(self) -> Dict[str, int]:
+        """Delete all persisted monitoring history in foreign-key order."""
+        tables = (
+            "verification_results",
+            "remediation_actions",
+            "diagnoses",
+            "detected_events",
+            "network_measurements",
+            "monitoring_sessions",
+        )
+        try:
+            with self._lock:
+                self._connection.execute("BEGIN")
+                deleted = {}
+                for table in tables:
+                    cursor = self._connection.execute(f"DELETE FROM {table}")
+                    deleted[table] = cursor.rowcount
+                self._connection.execute("COMMIT")
+            logger.info("Cleared persisted monitoring history: %s", deleted)
+            return deleted
+        except sqlite3.Error:
+            with self._lock:
+                if self._connection is not None:
+                    self._connection.rollback()
+            logger.exception("Could not clear persisted monitoring history.")
+            raise
+
     def get_session(self, session_id: int) -> Optional[Dict[str, Any]]:
         try:
             with self._lock:
@@ -352,6 +379,97 @@ class Database:
         except sqlite3.Error as exc:
             logger.error("Could not fetch verification results for session #%s: %s", session_id, exc)
             return []
+
+    def create_remediation_action(
+        self,
+        session_id: int,
+        action_name: str,
+        command: str,
+        pre_measurements: Dict[str, Any],
+        result: str,
+    ) -> Optional[int]:
+        try:
+            with self._lock:
+                cursor = self._connection.execute(
+                    """
+                    INSERT INTO remediation_actions
+                        (session_id, action_name, command, requires_admin, executed_at,
+                         pre_measurements, result)
+                    VALUES (?, ?, ?, 0, ?, ?, ?)
+                    """,
+                    (
+                        session_id,
+                        action_name,
+                        command,
+                        datetime.now().isoformat(timespec="seconds"),
+                        json.dumps(pre_measurements, ensure_ascii=True),
+                        result,
+                    ),
+                )
+                return cursor.lastrowid
+        except sqlite3.Error as exc:
+            logger.exception("Could not record remediation action.")
+            raise RuntimeError("Could not record remediation action.") from exc
+
+    def get_pending_remediation_actions(self) -> List[Dict[str, Any]]:
+        try:
+            with self._lock:
+                rows = self._connection.execute(
+                    """
+                    SELECT * FROM remediation_actions
+                    WHERE result LIKE '%"status": "PENDING_VERIFICATION"%'
+                    ORDER BY remediation_id ASC
+                    """
+                ).fetchall()
+            return [dict(row) for row in rows]
+        except sqlite3.Error as exc:
+            logger.exception("Could not fetch pending remediation actions.")
+            raise RuntimeError("Could not fetch pending remediation actions.") from exc
+
+    def update_remediation_result(self, remediation_id: int, result: str) -> None:
+        try:
+            with self._lock:
+                cursor = self._connection.execute(
+                    "UPDATE remediation_actions SET result = ? WHERE remediation_id = ?",
+                    (result, remediation_id),
+                )
+                if cursor.rowcount != 1:
+                    raise RuntimeError(f"Remediation action {remediation_id} was not found.")
+        except sqlite3.Error as exc:
+            logger.exception("Could not update remediation action #%s.", remediation_id)
+            raise RuntimeError("Could not update remediation action.") from exc
+
+    def record_verification_result(
+        self,
+        session_id: int,
+        remediation_id: int,
+        metric: str,
+        before_value: str,
+        after_value: str,
+        result: str,
+    ) -> None:
+        try:
+            with self._lock:
+                self._connection.execute(
+                    """
+                    INSERT INTO verification_results
+                        (session_id, remediation_id, metric, before_value,
+                         after_value, result, verified_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        session_id,
+                        remediation_id,
+                        metric,
+                        before_value,
+                        after_value,
+                        result,
+                        datetime.now().isoformat(timespec="seconds"),
+                    ),
+                )
+        except sqlite3.Error as exc:
+            logger.exception("Could not record remediation verification.")
+            raise RuntimeError("Could not record remediation verification.") from exc
 
     def record_remediation_review(
         self,

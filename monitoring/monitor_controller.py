@@ -43,6 +43,7 @@ from __future__ import annotations
 import queue
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -122,6 +123,10 @@ class MonitorController:
         self._updates: "queue.Queue[MeasurementRecord]" = queue.Queue()
 
         self.session_id: Optional[int] = None
+        self._network_snapshot = None
+        self._network_snapshot_refreshed_at = 0.0
+        self._previous_internet_latency_ms: Optional[float] = None
+        self.remediation_service = None
 
     # ------------------------------------------------------------------
     # Public control surface (safe to call from the GUI thread)
@@ -145,6 +150,8 @@ class MonitorController:
             return self.session_id
 
         snapshot = self._interface_monitor.refresh()
+        self._network_snapshot = snapshot
+        self._network_snapshot_refreshed_at = time.monotonic()
         session_id = self._database.create_session(
             interface=snapshot.interface, ipv4=snapshot.ipv4, gateway=snapshot.gateway
         )
@@ -192,6 +199,8 @@ class MonitorController:
                 stored = self._database.insert_measurement(record, session_id=self.session_id)
                 if not stored:
                     logger.error("Measurement collected but could not be stored in the database.")
+                elif self.remediation_service is not None:
+                    self.remediation_service.on_measurement()
                 self._updates.put(record)
             except Exception as exc:  # noqa: BLE001 - a monitoring round must never kill the thread
                 logger.exception("Monitoring exception during a measurement round: %s", exc)
@@ -213,14 +222,51 @@ class MonitorController:
         dns_timeout = settings.get("dns_timeout", 3)
         ping_timeout = settings.get("ping_timeout_seconds", 2)
 
-        # Cheap: OS queries only, no network traffic. Refreshed every
-        # round so a Wi-Fi roam / adapter change is picked up.
-        snapshot = self._interface_monitor.refresh()
+        # Network configuration is cached between rounds and refreshed
+        # periodically so OS configuration commands do not slow every tick.
+        now = time.monotonic()
+        refresh_interval = max(1, int(settings.get("network_info_refresh_seconds", 5)))
+        # With one ping per cycle, estimate jitter from consecutive cycle latencies.
+        if (
+            self._network_snapshot is None
+            or now - self._network_snapshot_refreshed_at >= refresh_interval
+        ):
+            self._network_snapshot = self._interface_monitor.refresh()
+            self._network_snapshot_refreshed_at = time.monotonic()
+        snapshot = self._network_snapshot
 
-        gateway_result = check_gateway(snapshot.gateway, ping_count=gateway_ping_count, timeout_seconds=ping_timeout)
-        internet_result = check_internet(internet_host, ping_count=internet_ping_count, timeout_seconds=ping_timeout)
-        dns_result = check_dns(dns_domain, timeout_seconds=dns_timeout)
-        http_result = check_http(http_url, timeout_seconds=http_timeout)
+        with ThreadPoolExecutor(max_workers=4, thread_name_prefix="NetworkProbe") as executor:
+            gateway_future = executor.submit(
+                check_gateway,
+                snapshot.gateway,
+                ping_count=gateway_ping_count,
+                timeout_seconds=ping_timeout,
+            )
+            internet_future = executor.submit(
+                check_internet,
+                internet_host,
+                ping_count=internet_ping_count,
+                timeout_seconds=ping_timeout,
+            )
+            dns_future = executor.submit(check_dns, dns_domain, timeout_seconds=dns_timeout)
+            http_future = executor.submit(check_http, http_url, timeout_seconds=http_timeout)
+
+            gateway_result = gateway_future.result()
+            internet_result = internet_future.result()
+            dns_result = dns_future.result()
+            http_result = http_future.result()
+
+        if (
+            internet_result.jitter_ms is None
+            and internet_result.latency_avg_ms is not None
+            and self._previous_internet_latency_ms is not None
+        ):
+            internet_result.jitter_ms = round(
+                abs(internet_result.latency_avg_ms - self._previous_internet_latency_ms),
+                2,
+            )
+        if internet_result.latency_avg_ms is not None:
+            self._previous_internet_latency_ms = internet_result.latency_avg_ms
 
         overall_status = self._compute_overall_status(gateway_result, internet_result, dns_result, http_result, settings)
 

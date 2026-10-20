@@ -2,11 +2,15 @@ venv/
 .venv/
 __pycache__/
 *.py[cod]
+*.tsbuildinfo
 
 data/*.db
 data/*.sqlite
 data/*.sqlite3
 logs/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
 
 *_before_*.py
 *_backup.py
