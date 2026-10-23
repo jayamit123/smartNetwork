@@ -1,4 +1,4 @@
-# Smart Network Diagnosis System
+# An Endpoint-Based Low-Overhead Framework for Detecting and Remediating Intermittent Internet Connectivity Degradation
 
 The historical sections below document the original desktop implementation
 and its development phases. The default entry point (`python app.py`) runs
